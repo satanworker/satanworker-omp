@@ -1,10 +1,10 @@
 modelRoles:
-  gpt: openai-codex/gpt-5.6-sol
+  gpt: openai/gpt-6-sol
   grok: xai-oauth/grok-4.6
   glm: deepinfra/zai-org/GLM-5.3-Flash:high
   astra: openai-codex/gpt-6-astra
-  default: openai-codex/gpt-5.6-sol:high
-  smol: openai-codex/gpt-5.6-luna
+  default: openai/gpt-6-sol:high
+  smol: openai/gpt-6-luna
   slow: openai-codex/gpt-5.5
   web: web/exa
 web_search:
@@ -39,7 +39,7 @@ retry:
       - google/gemini-2.5-flash
       - google-antigravity/gemini-2.5-flash
       - anthropic/claude-haiku-4-5
-      - openai-codex/gpt-5.6-luna
+      - openai/gpt-6-luna
       - openai-codex/gpt-5.6
       - openai-codex/gpt-5.5
       - xai-oauth/grok-4.5
