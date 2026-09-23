@@ -4,8 +4,8 @@ let
   cfg = config.satanworker.omp;
   machineConfig = (pkgs.formats.yaml { }).generate "omp-machine-config.yml" cfg.overrides;
   configFiles =
-    [ (toString ./config.yml) ]
-    ++ lib.optional (cfg.overrides != { }) (toString machineConfig);
+    [ "${./config.yml}" ]
+    ++ lib.optional (cfg.overrides != { }) "${machineConfig}";
 in
 {
   options.satanworker.omp = {
