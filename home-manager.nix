@@ -6,6 +6,7 @@ let
   configFiles =
     [ "${./config.yml}" ]
     ++ lib.optional (cfg.overrides != { }) "${machineConfig}";
+  overlayPaths = lib.concatStringsSep ":" configFiles;
 in
 {
   options.satanworker.omp = {
@@ -19,6 +20,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.sessionVariables.PI_CONFIG_FILES = lib.concatStringsSep ":" configFiles;
+    home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
+    xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
+      set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
+    '';
   };
 }
