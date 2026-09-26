@@ -9,6 +9,20 @@ modelRoles:
   web: web/exa
 web_search:
   enabled: true
+symbolPreset: nerd
+composer:
+  shape: claude
+theme:
+  dark: dark-monochrome
+  light: light
+setupVersion: 2
+hideThinkingBlock: false
+display:
+  cacheMissMarker: true
+prewalk:
+  enabled: false
+browser:
+  enabled: true
 providers:
   webSearchOrder:
     - exa
