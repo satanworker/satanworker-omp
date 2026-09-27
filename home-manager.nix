@@ -1,11 +1,12 @@
 { config, lib, pkgs, ... }:
 
 let
-  cfg = config.satanworker.omp;
-  machineConfig = (pkgs.formats.yaml { }).generate "omp-machine-config.yml" cfg.overrides;
+  ompCfg = config.satanworker.omp;
+  claudeCfg = config.satanworker.claude;
+  machineConfig = (pkgs.formats.yaml { }).generate "omp-machine-config.yml" ompCfg.overrides;
   configFiles =
     [ "${./config.yml}" ]
-    ++ lib.optional (cfg.overrides != { }) "${machineConfig}";
+    ++ lib.optional (ompCfg.overrides != { }) "${machineConfig}";
   overlayPaths = lib.concatStringsSep ":" configFiles;
 in
 {
@@ -19,10 +20,39 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
-    xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
-      set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
-    '';
+  options.satanworker.claude = {
+    enable = lib.mkEnableOption "shared Claude Code configuration";
+
+    command = lib.mkOption {
+      type = lib.types.str;
+      default = "claude";
+      description = "Claude Code executable used during activation";
+    };
   };
+
+  config = lib.mkMerge [
+    (lib.mkIf ompCfg.enable {
+      home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
+      xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
+        set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
+      '';
+    })
+
+    (lib.mkIf claudeCfg.enable {
+      home.activation.installClaudePonytail = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        claude=${lib.escapeShellArg claudeCfg.command}
+        export PATH="${pkgs.git}/bin:${pkgs.nodejs_24}/bin:$PATH"
+
+        if ! "$claude" plugin marketplace list --json \
+          | ${pkgs.jq}/bin/jq -e '.[] | select(.name == "ponytail")' >/dev/null; then
+          "$claude" plugin marketplace add --scope user DietrichGebert/ponytail
+        fi
+
+        if ! "$claude" plugin list --json \
+          | ${pkgs.jq}/bin/jq -e '.[] | select(.id == "ponytail@ponytail" and .enabled == true)' >/dev/null; then
+          "$claude" plugin install --scope user --yes ponytail@ponytail
+        fi
+      '';
+    })
+  ];
 }
