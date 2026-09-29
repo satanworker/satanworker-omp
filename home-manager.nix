@@ -18,6 +18,14 @@ in
       default = { };
       description = "Machine-specific OMP settings layered over the shared configuration";
     };
+
+    packages = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.nullOr lib.types.package);
+      description = ''
+        Language servers and tools OMP uses, by name. Set a shared entry to
+        null to drop it on one machine; add entries for machine-only tools.
+      '';
+    };
   };
 
   options.satanworker.claude = {
@@ -32,6 +40,15 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf ompCfg.enable {
+      satanworker.omp.packages = lib.mapAttrs (_: lib.mkDefault) {
+        inherit (pkgs)
+          gopls
+          typescript
+          typescript-language-server
+          tailwindcss-language-server
+          vscode-langservers-extracted;
+      };
+      home.packages = lib.filter (p: p != null) (lib.attrValues ompCfg.packages);
       home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
         set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
