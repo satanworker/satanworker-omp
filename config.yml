@@ -3,6 +3,8 @@ modelRoles:
   grok: xai-oauth/grok-4.6
   glm: deepinfra/zai-org/GLM-5.3-Flash:high
   astra: openai-codex/gpt-6-astra
+  opus: anthropic/claude-opus-5-5
+  fable: anthropic/claude-fable-5-1
   default: openai-codex/gpt-6-sol:high
   smol: openai-codex/gpt-6-luna
   slow: openai-codex/gpt-5.5
@@ -32,6 +34,8 @@ cycleOrder:
   - grok
   - glm
   - astra
+  - opus
+  - fable
 disabledProviders:
   - agent-plugins
   - claude
