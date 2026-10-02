@@ -50,6 +50,7 @@ in
       };
       home.packages = lib.filter (p: p != null) (lib.attrValues ompCfg.packages);
       home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
+      home.file.".omp/agent/agents/grok-research.md".source = ./agents/grok-research.md;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
         set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
       '';
