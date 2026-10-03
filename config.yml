@@ -1,13 +1,16 @@
 modelRoles:
-  gpt: openai-codex/gpt-6.1-sol
+  # gpt: openai-codex/gpt-6.1-sol
   grok: xai-oauth/grok-4.6
   glm: deepinfra/zai-org/GLM-5.3-Flash:high
-  astra: openai-codex/gpt-6-astra
+  # astra: openai-codex/gpt-6-astra
   opus: anthropic/claude-opus-5-5
   fable: anthropic/claude-fable-5-1
-  default: openai-codex/gpt-6.1-sol:high
-  smol: openai-codex/gpt-6-luna
-  slow: openai-codex/gpt-5.5
+  # default: openai-codex/gpt-6.1-sol:high
+  # smol: openai-codex/gpt-6-luna
+  # slow: openai-codex/gpt-5.5
+  default: anthropic/claude-opus-5-5:high
+  smol: anthropic/claude-haiku-4-5
+  slow: anthropic/claude-opus-5-5
   web: web/exa
 web_search:
   enabled: true
@@ -30,10 +33,10 @@ providers:
     - exa
     - xai
 cycleOrder:
-  - gpt
+  # - gpt
   - grok
   - glm
-  - astra
+  # - astra
   - opus
   - fable
 disabledProviders:
@@ -58,9 +61,9 @@ retry:
       - google/gemini-2.5-flash
       - google-antigravity/gemini-2.5-flash
       - anthropic/claude-haiku-4-5
-      - openai-codex/gpt-6-luna
-      - openai-codex/gpt-5.6
-      - openai-codex/gpt-5.5
+      # - openai-codex/gpt-6-luna
+      # - openai-codex/gpt-5.6
+      # - openai-codex/gpt-5.5
       - xai-oauth/grok-4.5
       - web/zai
       - web/tinyfish
