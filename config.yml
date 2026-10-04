@@ -9,7 +9,7 @@ modelRoles:
   # smol: openai-codex/gpt-6-luna
   # slow: openai-codex/gpt-5.5
   default: anthropic/claude-opus-5-5:high
-  smol: anthropic/claude-haiku-4-5
+  smol: anthropic/claude-sonnet-5-5
   slow: anthropic/claude-opus-5-5
   web: web/exa
 web_search:
@@ -60,7 +60,7 @@ retry:
       - web/perplexity
       - google/gemini-2.5-flash
       - google-antigravity/gemini-2.5-flash
-      - anthropic/claude-haiku-4-5
+      - anthropic/claude-sonnet-5-5
       # - openai-codex/gpt-6-luna
       # - openai-codex/gpt-5.6
       # - openai-codex/gpt-5.5

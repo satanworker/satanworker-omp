@@ -52,6 +52,7 @@ in
       home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
       home.file.".omp/agent/agents/grok-research.md".source = ./agents/grok-research.md;
       home.file.".omp/agent/AGENTS.md".source = ./AGENTS.md;
+      home.file.".omp/agent/extensions/x-search.ts".source = ./extensions/x-search.ts;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
         set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
       '';
