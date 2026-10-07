@@ -57,6 +57,10 @@ in
       home.file.".omp/agent/.mcp.json".source = ./mcp.json;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
         set -gx PI_CONFIG_FILES ${lib.escapeShellArg overlayPaths}
+        # OMP turns images off when HERDR_ENV=1; herdr passes Kitty graphics through.
+        if test "$HERDR_ENV" = 1
+          set -gx PI_FORCE_IMAGE_PROTOCOL kitty
+        end
       '';
     })
 
