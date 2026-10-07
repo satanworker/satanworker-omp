@@ -5,4 +5,4 @@
 - Never persist OMP changes by editing `~/.omp/agent/config.yml` or saving `cfg://` writes: the shared config is layered over it via `PI_CONFIG_FILES` and the change is lost on other machines.
 - To roll out: commit and push `satanworker-omp`, then `nix flake update satanworker-omp` in both `satanworker` and `home-satan`, and rebuild (`darwin-rebuild switch --flake .` on the Mac; `make switch` in `home-satan`).
 
-- Research: when asked to research or search the web/X, spawn `grok-research` subagents via `task` (one per independent question, all in one batch); do not answer from parent-side searches. Each runs both `web_search` (Exa) and `x_search` (xAI). Direct parent calls are only for a one-off lookup inside other work, and then still use both tools (X search is not Grok-only). Never `web_search site:x.com`.
+- Research: every model (Grok, Opus, GLM, Sonnet) uses `web_search` (Exa) **and** `x_search` (xAI). Do not treat X search as Grok-only. Never `web_search site:x.com`.
