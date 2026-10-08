@@ -93,13 +93,14 @@ function parseSpec(raw: unknown): Spec {
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const r = Math.round;
 
-const STYLE = `.g{fill:var(--accent);fill-opacity:.05;stroke:var(--border)}
-.b{fill:var(--surface);stroke:var(--border)}.f{fill:var(--surface);stroke:var(--accent);stroke-width:2}
+// omp maps var(--surface) to the theme's selection colour, so boxes use a faint fg tint that works on light and dark.
+const STYLE = `.g{fill:var(--fg);fill-opacity:.025;stroke:var(--border)}
+.b{fill:var(--fg);fill-opacity:.035;stroke:var(--border)}.f{fill:var(--accent);fill-opacity:.07;stroke:var(--accent);stroke-width:1.6}
 .r{fill:none;stroke:var(--border)}.s{fill:url(#s)}
 .k{font-size:9px;letter-spacing:1.5px;fill:var(--muted)}.h{font-size:13px;font-weight:bold;fill:var(--fg)}
 .c{font-size:12px;fill:var(--fg)}.t{font-size:10.5px;fill:var(--muted);text-anchor:end}.m{font-size:10.5px;fill:var(--muted)}
 .e{fill:none;stroke:var(--muted);stroke-width:1.1;stroke-opacity:.8}.ea{fill:none;stroke:var(--accent);stroke-width:1.6}
-.d{fill:var(--surface);stroke:var(--muted);stroke-width:1.2}
+.d{fill:var(--muted)}
 .lb{fill:var(--surface);stroke:var(--border)}.la{fill:var(--surface);stroke:var(--accent)}.lt{font-size:10.5px;fill:var(--muted);text-anchor:middle}`;
 const DEFS = `<pattern id="s" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="10" fill="var(--accent)" fill-opacity=".16"/></pattern>
 <marker id="m" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="var(--muted)"/></marker>
@@ -111,10 +112,10 @@ export async function render(spec: Spec): Promise<string> {
   const byId = new Map(spec.tables.map((t) => [t.id, t]));
   const size = new Map<string, { w: number; h: number }>();
   for (const t of spec.tables) {
-    // Monospace estimate: ~0.6em per glyph at each font size used below.
+    // Monospace estimate, generous so a wider fallback font still leaves a gap between name and type.
     const w = r(Math.max(
-      (t.kind ?? "table").length * 6.6 + t.name.length * 7.9 + 36,
-      ...t.fields.map((f) => (f.key ? 30 : 0) + f.name.length * 7.3 + f.type.length * 6.4 + 40),
+      (t.kind ?? "table").length * 7 + t.name.length * 8.4 + 40,
+      ...t.fields.map((f) => (f.key ? 30 : 0) + f.name.length * 7.6 + f.type.length * 6.8 + 52),
     ));
     size.set(t.id, { w, h: HEAD + (t.fields.length + (t.more ? 1 : 0)) * ROW + (t.fields.length || t.more ? 0 : 14) });
   }
@@ -134,13 +135,14 @@ export async function render(spec: Spec): Promise<string> {
     layoutOptions: {
       "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN", "elk.spacing.nodeNode": "28",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "56", "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "64", "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
       "elk.layered.spacing.edgeNodeBetweenLayers": "16", "elk.spacing.edgeEdge": "10",
       "elk.json.edgeCoords": "ROOT", "elk.json.shapeCoords": "ROOT", "elk.padding": "[top=16,left=16,bottom=16,right=16]",
     },
     children: [
       ...(spec.groups ?? []).map((g) => ({
-        id: g.id, layoutOptions: { "elk.padding": "[top=46,left=20,bottom=20,right=20]" },
+        // Spacing options are per parent, so groups repeat the root's layer spacing.
+        id: g.id, layoutOptions: { "elk.padding": "[top=46,left=20,bottom=20,right=20]", "elk.layered.spacing.nodeNodeBetweenLayers": "64", "elk.layered.spacing.edgeNodeBetweenLayers": "16" },
         children: g.children.map((c) => node(byId.get(c)!)),
       })),
       ...spec.tables.filter((t) => !grouped.has(t.id)).map(node),
@@ -165,7 +167,7 @@ export async function render(spec: Spec): Promise<string> {
   const svg: string[] = [];
   for (const g of spec.groups ?? []) {
     const { x, y, width, height } = box.get(g.id)!;
-    svg.push(`<rect class="g" x="${x}" y="${y}" width="${width}" height="${height}" rx="8"/><text class="k" x="${x + 16}" y="${y + 24}">${esc(g.kind.toUpperCase())}</text><text class="h" x="${r(x + 30 + g.kind.length * 6.6)}" y="${y + 24}">${esc(g.name)}</text>`);
+    svg.push(`<rect class="g" x="${x}" y="${y}" width="${width}" height="${height}" rx="8"/><text class="k" x="${x + 16}" y="${y + 24}">${esc(g.kind.toUpperCase())}</text><text class="h" x="${r(x + 28 + g.kind.length * 7)}" y="${y + 24}">${esc(g.name)}</text>`);
   }
   const dots = new Set<string>(), labels: string[] = [];
   for (const [i, e] of spec.edges.entries()) {
@@ -173,17 +175,22 @@ export async function render(spec: Spec): Promise<string> {
     for (const s of oe.sections ?? []) {
       const pts = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
       svg.push(`<path class="${e.focus ? "ea" : "e"}" marker-end="url(#${e.focus ? "a" : "m"})" d="M${pts.map((p) => `${r(p.x)} ${r(p.y)}`).join("L")}"/>`);
-      dots.add(`<circle class="d" cx="${r(s.startPoint.x)}" cy="${r(s.startPoint.y)}" r="3.5"/>`);
-    }
-    for (const l of oe.labels ?? []) {
-      const x = r(l.x!), y = r(l.y!), w = r(l.width!);
-      labels.push(`<rect class="${e.focus ? "la" : "lb"}" x="${x}" y="${y}" width="${w}" height="20" rx="4"/><text class="lt" x="${r(x + w / 2)}" y="${y + 14}">${esc(l.text ?? "")}</text>`);
+      dots.add(`<circle class="d" cx="${r(s.startPoint.x)}" cy="${r(s.startPoint.y)}" r="3"/>`);
+      if (!e.label) continue;
+      // ELK reserves room for the label; draw it centred on the longest horizontal run so it sits on its own line.
+      let best = { x: (pts[0].x + pts[1].x) / 2, y: pts[0].y, len: -1 };
+      for (let k = 1; k < pts.length; k++) {
+        const len = Math.abs(pts[k].x - pts[k - 1].x);
+        if (pts[k].y === pts[k - 1].y && len > best.len) best = { x: (pts[k].x + pts[k - 1].x) / 2, y: pts[k].y, len };
+      }
+      const w = r(e.label.length * 6.8 + 16);
+      labels.push(`<rect class="${e.focus ? "la" : "lb"}" x="${r(best.x - w / 2)}" y="${r(best.y - 10)}" width="${w}" height="20" rx="10"/><text class="lt" x="${r(best.x)}" y="${r(best.y + 4)}">${esc(e.label)}</text>`);
     }
   }
   for (const t of spec.tables) {
     const { x, y, width: w, height: h } = box.get(t.id)!;
     const kind = t.kind ?? "table";
-    const rows = [`<g transform="translate(${x} ${y})"><rect class="${t.focus ? "f" : "b"}" width="${w}" height="${h}" rx="6"/><text class="k" x="12" y="20">${esc(kind.toUpperCase())}</text><text class="h" x="${r(24 + kind.length * 6.6)}" y="20">${esc(t.name)}</text>`];
+    const rows = [`<g transform="translate(${x} ${y})"><rect class="${t.focus ? "f" : "b"}" width="${w}" height="${h}" rx="6"/><text class="k" x="12" y="20">${esc(kind.toUpperCase())}</text><text class="h" x="${r(22 + kind.length * 7)}" y="20">${esc(t.name)}</text>`];
     const lines = t.fields.map((_, i) => `M0 ${HEAD + i * ROW}h${w}`);
     if (t.more) lines.push(`M0 ${HEAD + t.fields.length * ROW}h${w}`);
     t.fields.forEach((f, i) => {
