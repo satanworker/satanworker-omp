@@ -47,12 +47,14 @@ in
           typescript-language-server
           tailwindcss-language-server
           vscode-langservers-extracted;
+        schema-diagram = pkgs.callPackage ./tools/schema-diagram { };
       };
       home.packages = lib.filter (p: p != null) (lib.attrValues ompCfg.packages);
       home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
       home.file.".omp/agent/agents/grok-research.md".source = ./agents/grok-research.md;
       home.file.".omp/agent/AGENTS.md".source = ./AGENTS.md;
       home.file.".omp/agent/extensions/x-search.ts".source = ./extensions/x-search.ts;
+      home.file.".omp/agent/skills/schema-diagram/SKILL.md".source = ./skills/schema-diagram/SKILL.md;
       # .mcp.json, not mcp.json: OMP reads both, and keeps writing /mcp add to mcp.json.
       home.file.".omp/agent/.mcp.json".source = ./mcp.json;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
