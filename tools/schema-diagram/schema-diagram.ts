@@ -117,52 +117,104 @@ export async function render(spec: Spec): Promise<string> {
       (t.kind ?? "table").length * 7 + t.name.length * 8.4 + 40,
       ...t.fields.map((f) => (f.key ? 30 : 0) + f.name.length * 7.6 + f.type.length * 6.8 + 52),
     ));
-    size.set(t.id, { w, h: HEAD + (t.fields.length + (t.more ? 1 : 0)) * ROW + (t.fields.length || t.more ? 0 : 14) });
+    // A box without rows is just its 30px header.
+    size.set(t.id, { w, h: HEAD + (t.fields.length + (t.more ? 1 : 0)) * ROW });
+  }
+  // Tables in one group share a width, so a group reads as one aligned column.
+  for (const g of spec.groups ?? []) {
+    const w = Math.max(...g.children.map((c) => size.get(c)!.w));
+    for (const c of g.children) size.get(c)!.w = w;
   }
   const node = (t: Table): ElkNode => {
     const { w, h } = size.get(t.id)!;
-    // Each field gets a port at its row centre on both sides, so edges start and end on the row.
-    const ports = t.fields.flatMap((f, i) => [
-      { id: `${t.id}.${f.name}:W`, x: 0, y: HEAD + i * ROW + ROW / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "WEST" } },
-      { id: `${t.id}.${f.name}:E`, x: w, y: HEAD + i * ROW + ROW / 2, width: 0, height: 0, layoutOptions: { "elk.port.side": "EAST" } },
+    // Ports at each row centre (and the header for table-level edges), so edges start and end on a row
+    // and a header-only box can sit level with the header it links to.
+    const ports = [{ id: "", y: HEAD / 2 }, ...t.fields.map((f, i) => ({ id: `.${f.name}`, y: HEAD + i * ROW + ROW / 2 }))].flatMap((p) => [
+      { id: `${t.id}${p.id}:W`, x: 0, y: p.y, width: 0, height: 0, layoutOptions: { "elk.port.side": "WEST" } },
+      { id: `${t.id}${p.id}:E`, x: w, y: p.y, width: 0, height: 0, layoutOptions: { "elk.port.side": "EAST" } },
     ]);
     return { id: t.id, width: w, height: h, ports, layoutOptions: { "elk.portConstraints": "FIXED_POS" } };
   };
   const grouped = new Set(spec.groups?.flatMap((g) => g.children));
-  // Layout options follow Whiteboard Desktop's canvas: layered, orthogonal, children inside their group.
-  const graph: ElkNode = {
-    id: "root",
-    layoutOptions: {
-      "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL",
-      "elk.hierarchyHandling": "INCLUDE_CHILDREN", "elk.spacing.nodeNode": "28",
-      "elk.layered.spacing.nodeNodeBetweenLayers": "64", "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
-      "elk.layered.spacing.edgeNodeBetweenLayers": "16", "elk.spacing.edgeEdge": "10",
-      "elk.json.edgeCoords": "ROOT", "elk.json.shapeCoords": "ROOT", "elk.padding": "[top=16,left=16,bottom=16,right=16]",
-    },
-    children: [
-      ...(spec.groups ?? []).map((g) => ({
-        // Spacing options are per parent, so groups repeat the root's layer spacing.
-        id: g.id, layoutOptions: { "elk.padding": "[top=46,left=20,bottom=20,right=20]", "elk.layered.spacing.nodeNodeBetweenLayers": "64", "elk.layered.spacing.edgeNodeBetweenLayers": "16" },
-        children: g.children.map((c) => node(byId.get(c)!)),
-      })),
-      ...spec.tables.filter((t) => !grouped.has(t.id)).map(node),
-    ],
-    edges: spec.edges.map((e, i) => ({
-      id: `e${i}`,
-      sources: [e.from.includes(".") ? `${e.from}:E` : e.from],
-      targets: [e.to.includes(".") ? `${e.to}:W` : e.to],
-      labels: e.label ? [{ text: e.label, width: e.label.length * 6.4 + 16, height: 20 }] : [],
-    })),
+  const groupOf = new Map((spec.groups ?? []).flatMap((g) => g.children.map((c) => [c, g.id] as const)));
+  const tableOf = (ref: string) => ref.split(".", 1)[0];
+  const spacing = { "elk.spacing.nodeNode": "24", "elk.layered.spacing.nodeNodeBetweenLayers": "64", "elk.layered.spacing.edgeNodeBetweenLayers": "16" };
+  const rootOptions = {
+    ...spacing,
+    // Keep the spec's table order (Whiteboard does the same) so rows line up across groups.
+    // Root only: elkjs 0.12 crashes in crossing minimization when groups repeat the model-order options.
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES", "elk.layered.crossingMinimization.forceNodeModelOrder": "true",
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX", "elk.separateConnectedComponents": "false",
+    "elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.edgeRouting": "ORTHOGONAL", "elk.spacing.edgeEdge": "10",
+    "elk.json.edgeCoords": "ROOT", "elk.json.shapeCoords": "ROOT", "elk.padding": "[top=16,left=16,bottom=16,right=16]",
   };
-  const out = await new ELK().layout(graph);
+  const edges = spec.edges.map((e, i) => ({
+    id: `e${i}`,
+    sources: [`${e.from}:E`],
+    targets: [`${e.to}:W`],
+    labels: e.label ? [{ text: e.label, width: e.label.length * 6.4 + 16, height: 20 }] : [],
+  }));
+  // A table with no edges would land in the first column; pin it to its group's column instead:
+  // last if no edge leaves the group (a sink column), first if no edge enters it (a source column).
+  const linked = new Set(spec.edges.flatMap((e) => [tableOf(e.from), tableOf(e.to)]));
+  const pin = new Map<string, string>();
+  for (const g of spec.groups ?? []) {
+    const member = new Set(g.children);
+    const leaves = spec.edges.some((e) => member.has(tableOf(e.from)) && !member.has(tableOf(e.to)));
+    const enters = spec.edges.some((e) => member.has(tableOf(e.to)) && !member.has(tableOf(e.from)));
+    if (leaves !== enters) for (const c of g.children) if (!linked.has(c)) pin.set(c, leaves ? "FIRST" : "LAST");
+  }
 
-  // shapeCoords=ROOT: every node box is already absolute.
-  const box = new Map<string, { x: number; y: number; width: number; height: number }>();
-  const collect = (n: ElkNode): void => {
-    box.set(n.id, { x: r(n.x ?? 0), y: r(n.y ?? 0), width: r(n.width ?? 0), height: r(n.height ?? 0) });
-    n.children?.forEach(collect);
-  };
-  collect(out);
+  // First try every table at top level: edges come out straight and groups are drawn around their tables.
+  // A group whose box would hit another group or a foreign table falls back to ELK's nested layout.
+  const flatOut: ElkNode = await new ELK().layout({
+    id: "root", layoutOptions: rootOptions, edges,
+    children: spec.tables.map((t) => {
+      const n = node(t);
+      const p = pin.get(t.id);
+      if (p) n.layoutOptions = { ...n.layoutOptions, "elk.layered.layering.layerConstraint": p };
+      return n;
+    }),
+  });
+  type Box = { x: number; y: number; width: number; height: number };
+  const box = new Map<string, Box>();
+  for (const n of flatOut.children ?? []) box.set(n.id, { x: r(n.x ?? 0), y: r(n.y ?? 0), width: r(n.width ?? 0), height: r(n.height ?? 0) });
+  for (const g of spec.groups ?? []) {
+    const m = g.children.map((c) => box.get(c)!);
+    const x0 = Math.min(...m.map((b) => b.x)) - 20, y0 = Math.min(...m.map((b) => b.y)) - 46;
+    box.set(g.id, { x: x0, y: y0, width: Math.max(...m.map((b) => b.x + b.width)) + 20 - x0, height: Math.max(...m.map((b) => b.y + b.height)) + 20 - y0 });
+  }
+  const hit = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const clash = (spec.groups ?? []).some((g, i) =>
+    (spec.groups ?? []).some((h, j) => j > i && hit(box.get(g.id)!, box.get(h.id)!)) ||
+    spec.tables.some((t) => groupOf.get(t.id) !== g.id && hit(box.get(g.id)!, box.get(t.id)!)));
+
+  let out: ElkNode = flatOut;
+  if (clash) {
+    out = await new ELK().layout({
+      id: "root", edges,
+      layoutOptions: { ...rootOptions, "elk.hierarchyHandling": "INCLUDE_CHILDREN" },
+      children: [
+        ...(spec.groups ?? []).map((g) => ({
+          // Spacing options are per parent, so each group repeats them.
+          id: g.id, layoutOptions: { ...spacing, "elk.padding": "[top=46,left=20,bottom=20,right=20]" },
+          children: g.children.map((c) => node(byId.get(c)!)),
+        })),
+        ...spec.tables.filter((t) => !grouped.has(t.id)).map(node),
+      ],
+    });
+    // shapeCoords=ROOT: every node box is already absolute.
+    const collect = (n: ElkNode): void => {
+      box.set(n.id, { x: r(n.x ?? 0), y: r(n.y ?? 0), width: r(n.width ?? 0), height: r(n.height ?? 0) });
+      n.children?.forEach(collect);
+    };
+    collect(out);
+  }
+  // Group boxes in the flat layout can stick out past ELK's canvas: shift everything so the drawing starts at 16.
+  const all = [...box.values()];
+  const dx = 16 - Math.min(16, ...all.map((b) => b.x)), dy = 16 - Math.min(16, ...all.map((b) => b.y));
+  const W = Math.max(r(out.width ?? 0), ...all.map((b) => b.x + b.width + 16)) + dx;
+  const H = Math.max(r(out.height ?? 0), ...all.map((b) => b.y + b.height + 16)) + dy;
 
   const svg: string[] = [];
   for (const g of spec.groups ?? []) {
@@ -203,10 +255,12 @@ export async function render(spec: Spec): Promise<string> {
     if (lines.length) rows.push(`<path class="r" d="${lines.join("")}"/>`);
     svg.push(rows.join("") + "</g>");
   }
-  return `<svg viewBox="0 0 ${r(out.width!)} ${r(out.height!)}" xmlns="http://www.w3.org/2000/svg" font-family="Berkeley Mono,Menlo,monospace">
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Berkeley Mono,Menlo,monospace">
 <style>${STYLE}</style>
 <defs>${DEFS}</defs>
+<g transform="translate(${dx} ${dy})">
 ${[...svg, ...dots, ...labels].join("\n")}
+</g>
 </svg>
 `;
 }

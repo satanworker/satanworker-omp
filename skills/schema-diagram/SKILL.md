@@ -50,10 +50,12 @@ The command exits 1 with a message naming the bad path (unknown table, missing f
 - `focus`: accent outline on a table or accent colour on an edge. Keep it to the 1–3 things the reader should look at first.
 - `edges[].from` / `to`: `table` or `table.field`. Field ends attach to that row: `from` leaves the row's right side, `to` enters the target row's left side. Point edges from the referencing column to the referenced key.
 - `label`: short text (≤ 24 chars) placed next to the edge.
-- `groups[].kind`: tag such as `database` or `schema`. A table belongs to at most one group.
+- `groups[].kind`: tag such as `database` or `schema`. A table belongs to at most one group. Tables in a group are drawn the same width; the group name must be true for every table in it (one ClickHouse server holding `public.*` and `vertical.*` tables is "HEL1 ClickHouse", not "public").
+- Order matters: tables are stacked in spec order. For a flow (source → lake → target), list each group's tables in the same order so every row runs straight across.
 
 ## Keep it readable
 
 - 3–6 columns per table: keys, link columns, then the columns the question is about. Put the rest in `more`.
 - At most about 12 tables. A bigger schema: split by subsystem into several diagrams.
 - Shorten noisy types: `Nullable(Int32)` → `Int32?`, `DateTime64(6, 'UTC')` → `DateTime64`. Say in the reply that `?` means nullable.
+- Several stages of the same tables (source → staging → target) read best as one group per stage, laid out left to right.
