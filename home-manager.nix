@@ -55,8 +55,6 @@ in
       home.file.".omp/agent/AGENTS.md".source = ./AGENTS.md;
       home.file.".omp/agent/extensions/x-search.ts".source = ./extensions/x-search.ts;
       home.file.".omp/agent/skills/schema-diagram/SKILL.md".source = ./skills/schema-diagram/SKILL.md;
-      # .mcp.json, not mcp.json: OMP reads both, and keeps writing /mcp add to mcp.json.
-      home.file.".omp/agent/.mcp.json".source = ./mcp.json;
       home.file.".omp/agent/extensions/tireless-recall.ts".source = ./extensions/tireless-recall.ts;
       home.file.".omp/agent/skills/recall/SKILL.md".source = ./skills/recall/SKILL.md;
       xdg.configFile."fish/conf.d/10-satanworker-omp.fish".text = ''
