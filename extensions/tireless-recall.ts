@@ -97,6 +97,15 @@ export default function tirelessRecallExtension(pi: any) {
 		return result.stdout.trim() || "{}";
 	}
 
+	async function search(args: string[], cwd: string, signal?: AbortSignal) {
+		const start = performance.now();
+		const raw = await runTireless(args, cwd, signal);
+		const ms = Math.round(performance.now() - start);
+		const formatted = formatHits(raw);
+		const out = applyTruncation(`${formatted.hitCount} hits in ${ms}ms\n\n${formatted.text}`);
+		return { text: out.text, hitCount: formatted.hitCount, ms, truncation: out.truncation };
+	}
+
 	async function recall(params: {
 		query: string;
 		limit?: number;
@@ -108,9 +117,7 @@ export default function tirelessRecallExtension(pi: any) {
 		if (params.session) args.push("-session", params.session);
 		if (params.project) args.push("-project", params.project);
 		args.push(params.query);
-		const formatted = formatHits(await runTireless(args, cwd, signal));
-		const out = applyTruncation(formatted.text);
-		return { text: out.text, hitCount: formatted.hitCount, truncation: out.truncation };
+		return search(args, cwd, signal);
 	}
 
 	pi.registerCommand("recall", {
@@ -123,7 +130,7 @@ export default function tirelessRecallExtension(pi: any) {
 			}
 			const out = await recall({ query }, ctx.cwd);
 			pi.sendMessage({ customType: "tireless-recall", content: out.text, display: true });
-			ctx.ui.notify(`recall: ${out.hitCount} hits`, out.hitCount ? "info" : "warning");
+			ctx.ui.notify(`recall: ${out.hitCount} hits in ${out.ms}ms`, out.hitCount ? "info" : "warning");
 		},
 	});
 
@@ -141,7 +148,7 @@ export default function tirelessRecallExtension(pi: any) {
 			const out = await recall(params, ctx.cwd, signal);
 			return {
 				content: [{ type: "text", text: out.text }],
-				details: { hitCount: out.hitCount, query: params.query, truncation: out.truncation },
+				details: { hitCount: out.hitCount, ms: out.ms, query: params.query, truncation: out.truncation },
 			};
 		},
 	});
@@ -166,11 +173,10 @@ export default function tirelessRecallExtension(pi: any) {
 			if (params.host) args.push("-session-host", params.host);
 			if (params.harness) args.push("-harness", params.harness);
 			args.push(params.session_id);
-			const formatted = formatHits(await runTireless(args, ctx.cwd, signal));
-			const out = applyTruncation(formatted.text);
+			const out = await search(args, ctx.cwd, signal);
 			return {
 				content: [{ type: "text", text: out.text }],
-				details: { hitCount: formatted.hitCount, session_id: params.session_id, truncation: out.truncation },
+				details: { hitCount: out.hitCount, ms: out.ms, session_id: params.session_id, truncation: out.truncation },
 			};
 		},
 	});
