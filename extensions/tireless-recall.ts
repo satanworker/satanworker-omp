@@ -1,6 +1,6 @@
 const SNIPPET = 500;
 const QUERY_LIMIT = 5;
-const SESSION_LIMIT = 8;
+const CONTAINER_LIMIT = 8;
 const MAX_LINES = 2000;
 const MAX_BYTES = 50 * 1024;
 
@@ -40,9 +40,14 @@ function snippet(text: string): string {
 type Hit = {
 	id?: string;
 	score?: number;
-	forward_content?: string;
+	text?: string;
 	metadata?: Record<string, unknown>;
 };
+
+function formatDate(ts: unknown): string {
+	const n = Number(ts);
+	return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString().slice(0, 16).replace("T", " ") : "";
+}
 
 function formatHits(raw: string): { text: string; hitCount: number } {
 	const parsed = JSON.parse(raw) as { results?: Hit[] };
@@ -52,13 +57,17 @@ function formatHits(raw: string): { text: string; hitCount: number } {
 		const m = h.metadata ?? {};
 		const head = [
 			`${i + 1}. score=${typeof h.score === "number" ? h.score.toFixed(2) : "?"}`,
-			`${m.host ?? "?"}/${m.harness ?? "?"}`,
-			m.project_name ?? "?",
-			`session=${m.session_id ?? "?"}`,
-			m.timestamp ?? "",
-			m.role ?? "",
-		].join(" ");
-		return `${head}\nid=${h.id ?? ""}\n${snippet(String(h.forward_content ?? ""))}`;
+			`${m.host ?? "?"}/${m.source ?? "?"}`,
+			`container=${m.container_title || m.container_id || "?"}`,
+			`author=${m.author_name || m.author_id || "?"}`,
+			m.project ? `project=${m.project}` : "",
+			formatDate(m.timestamp),
+			m.kind && m.kind !== "message" ? `kind=${m.kind}` : "",
+		]
+			.filter(Boolean)
+			.join(" ");
+		const ids = [`id=${h.id ?? ""}`, `container_id=${m.container_id ?? ""}`, `ts=${m.timestamp ?? ""}`].join(" ");
+		return `${head}\n${ids}\n${snippet(String(h.text ?? ""))}`;
 	});
 	return { text: blocks.join("\n\n"), hitCount: hits.length };
 }
@@ -75,18 +84,20 @@ function applyTruncation(text: string) {
 export default function tirelessRecallExtension(pi: any) {
 	const z = pi.zod;
 	const recallSchema = z.object({
-		query: z.string().describe("Search past Pi/Codex session turns"),
+		query: z.string().describe("Search past agent sessions and Telegram chats"),
 		limit: z.number().optional().describe("Hits to return (default 5, max 8)"),
-		session: z.string().optional().describe("Restrict to this session_id"),
-		project: z.string().optional().describe("Optional project_name filter"),
+		container: z.string().optional().describe("Restrict to this container_id (agent session id or Telegram chat id)"),
+		project: z.string().optional().describe("Optional project (repo) filter"),
+		source: z.string().optional().describe("Optional source filter: pi, codex, omp, claude, grok, grokbot, telegram"),
+		kind: z.string().optional().describe("Optional kind filter: message, title, todo, task"),
 	});
-	const sessionSchema = z.object({
-		session_id: z.string().describe("Session id from a recall hit"),
-		limit: z.number().optional().describe("Turns to return (default 8, max 20)"),
-		after_ts: z.number().optional().describe("Walk from this timestamp (use hit metadata.timestamp)"),
+	const containerSchema = z.object({
+		container_id: z.string().describe("container_id from a recall hit (session id or chat id)"),
+		limit: z.number().optional().describe("Records to return (default 8, max 20)"),
+		after_ts: z.number().optional().describe("Walk from this timestamp (use hit ts)"),
 		after_id: z.string().optional().describe("Walk after this record id"),
-		host: z.string().optional().describe("Machine tag, e.g. mbp14"),
-		harness: z.string().optional().describe("pi or codex"),
+		host: z.string().optional().describe("Ingesting host, e.g. mbp14"),
+		source: z.string().optional().describe("pi, codex, omp, claude, grok, grokbot, telegram"),
 	});
 
 	async function runTireless(args: string[], cwd: string, signal?: AbortSignal): Promise<string> {
@@ -106,22 +117,21 @@ export default function tirelessRecallExtension(pi: any) {
 		return { text: out.text, hitCount: formatted.hitCount, ms, truncation: out.truncation };
 	}
 
-	async function recall(params: {
-		query: string;
-		limit?: number;
-		session?: string;
-		project?: string;
-	}, cwd: string, signal?: AbortSignal) {
+	type RecallParams = { query: string; limit?: number; container?: string; project?: string; source?: string; kind?: string };
+
+	async function recall(params: RecallParams, cwd: string, signal?: AbortSignal) {
 		const limit = clamp(params.limit, QUERY_LIMIT, 8);
 		const args = ["query", "-embed", "-limit", String(limit)];
-		if (params.session) args.push("-session", params.session);
+		if (params.container) args.push("-container", params.container);
 		if (params.project) args.push("-project", params.project);
+		if (params.source) args.push("-source", params.source);
+		if (params.kind) args.push("-kind", params.kind);
 		args.push(params.query);
 		return search(args, cwd, signal);
 	}
 
 	pi.registerCommand("recall", {
-		description: "Search indexed Pi/Codex sessions (hybrid BM25+ANN)",
+		description: "Search indexed agent sessions and Telegram chats (hybrid BM25+ANN)",
 		handler: async (args: string, ctx: { cwd: string; ui: { notify: (msg: string, kind: string) => void } }) => {
 			const query = args.trim();
 			if (!query) {
@@ -137,14 +147,14 @@ export default function tirelessRecallExtension(pi: any) {
 	pi.registerTool({
 		name: "tireless_recall",
 		label: "tireless_recall",
-		description: `Search past Pi and Codex session turns via tireless-ledger (hybrid BM25+ANN). Output truncated to ${MAX_LINES} lines or ${formatSize(MAX_BYTES)}.`,
-		promptSnippet: "Past Pi/Codex session recall (decisions, not code search).",
+		description: `Search past agent sessions (Pi, Codex, omp, ...) and Telegram chats via tireless-ledger (hybrid BM25+ANN). Output truncated to ${MAX_LINES} lines or ${formatSize(MAX_BYTES)}.`,
+		promptSnippet: "Past agent session and Telegram chat recall (decisions, not code search).",
 		promptGuidelines: [
-			"Use tireless_recall for past Pi/Codex session decisions. Do not use it for repository code; use grep or semantic_search.",
-			"Use tireless_session with after_ts from a hit when neighboring turns are needed. Do not dump whole sessions.",
+			"Use tireless_recall for past decisions in agent sessions and Telegram chats. Do not use it for repository code; use grep or semantic_search.",
+			"Use tireless_session with container_id and after_ts from a hit when neighboring messages are needed. Do not dump whole sessions or chats.",
 		],
 		parameters: recallSchema,
-		async execute(_id: string, params: { query: string; limit?: number; session?: string; project?: string }, signal: AbortSignal, _onUpdate: unknown, ctx: { cwd: string }) {
+		async execute(_id: string, params: RecallParams, signal: AbortSignal, _onUpdate: unknown, ctx: { cwd: string }) {
 			const out = await recall(params, ctx.cwd, signal);
 			return {
 				content: [{ type: "text", text: out.text }],
@@ -156,27 +166,27 @@ export default function tirelessRecallExtension(pi: any) {
 	pi.registerTool({
 		name: "tireless_session",
 		label: "tireless_session",
-		description: "Walk turns in one indexed session. Prefer after_ts from a tireless_recall hit.",
-		parameters: sessionSchema,
+		description: "Walk messages in one indexed agent session or Telegram chat. Prefer container_id and after_ts from a tireless_recall hit.",
+		parameters: containerSchema,
 		async execute(_id: string, params: {
-			session_id: string;
+			container_id: string;
 			limit?: number;
 			after_ts?: number;
 			after_id?: string;
 			host?: string;
-			harness?: string;
+			source?: string;
 		}, signal: AbortSignal, _onUpdate: unknown, ctx: { cwd: string }) {
-			const limit = clamp(params.limit, SESSION_LIMIT, 20);
-			const args = ["session", "-limit", String(limit)];
+			const limit = clamp(params.limit, CONTAINER_LIMIT, 20);
+			const args = ["container", "-limit", String(limit)];
 			if (params.after_ts) args.push("-after-ts", String(Math.trunc(params.after_ts)));
 			if (params.after_id) args.push("-after-id", params.after_id);
-			if (params.host) args.push("-session-host", params.host);
-			if (params.harness) args.push("-harness", params.harness);
-			args.push(params.session_id);
+			if (params.host) args.push("-host", params.host);
+			if (params.source) args.push("-source", params.source);
+			args.push(params.container_id);
 			const out = await search(args, ctx.cwd, signal);
 			return {
 				content: [{ type: "text", text: out.text }],
-				details: { hitCount: out.hitCount, ms: out.ms, session_id: params.session_id, truncation: out.truncation },
+				details: { hitCount: out.hitCount, ms: out.ms, container_id: params.container_id, truncation: out.truncation },
 			};
 		},
 	});
