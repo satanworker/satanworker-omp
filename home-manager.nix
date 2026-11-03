@@ -4,9 +4,11 @@ let
   ompCfg = config.satanworker.omp;
   claudeCfg = config.satanworker.claude;
   machineConfig = (pkgs.formats.yaml { }).generate "omp-machine-config.yml" ompCfg.overrides;
+  # Stable symlinks, not store paths: shells started before a switch still load
+  # the new config the next time omp starts in them.
   configFiles =
-    [ "${./config.yml}" ]
-    ++ lib.optional (ompCfg.overrides != { }) "${machineConfig}";
+    [ "${config.home.homeDirectory}/.omp/agent/shared-config.yml" ]
+    ++ lib.optional (ompCfg.overrides != { }) "${config.home.homeDirectory}/.omp/agent/machine-config.yml";
   overlayPaths = lib.concatStringsSep ":" configFiles;
 in
 {
@@ -51,6 +53,8 @@ in
       };
       home.packages = lib.filter (p: p != null) (lib.attrValues ompCfg.packages);
       home.sessionVariables.PI_CONFIG_FILES = overlayPaths;
+      home.file.".omp/agent/shared-config.yml".source = ./config.yml;
+      home.file.".omp/agent/machine-config.yml" = lib.mkIf (ompCfg.overrides != { }) { source = machineConfig; };
       home.file.".omp/agent/agents/grok-research.md".source = ./agents/grok-research.md;
       home.file.".omp/agent/AGENTS.md".source = ./AGENTS.md;
       home.file.".omp/agent/extensions/x-search.ts".source = ./extensions/x-search.ts;
