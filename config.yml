@@ -27,7 +27,7 @@ display:
 prewalk:
   enabled: false
 browser:
-  enabled: true
+  enabled: false
 providers:
   webSearchOrder:
     - exa
