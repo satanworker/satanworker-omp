@@ -22,7 +22,6 @@ composer:
 theme:
   dark: dark-monochrome
   light: light
-setupVersion: 2
 hideThinkingBlock: false
 display:
   cacheMissMarker: true
