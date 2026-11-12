@@ -6,4 +6,3 @@
 - To roll out: commit and push `satanworker-omp`, then `nix flake update satanworker-omp` in both `satanworker` and `home-satan`, and rebuild (`darwin-rebuild switch --flake .` on the Mac; `make switch` in `home-satan`).
 
 - Research: every model (Grok, Opus, GLM, Sonnet) uses `web_search` (Exa) **and** `x_search` (xAI). Do not treat X search as Grok-only. Never `web_search site:x.com`.
-- Text the user will review or send (replies, emails, messages): write it as plain paragraphs or a blockquote, never a fenced code block. Tern cannot attach comments inside code blocks.
